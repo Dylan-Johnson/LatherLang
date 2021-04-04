@@ -1,173 +1,124 @@
-from sly import Lexer
-from sly import Parser
+# -----------------------------------------------------------------------------
+# calc.py
+# -----------------------------------------------------------------------------
 
-################################################################################
-#    LEXER
-################################################################################
-from sly import Lexer
+from sly import Lexer, Parser
+import sys
 
 class CalcLexer(Lexer):
-    # Set of token names.   This is always required
-    tokens = { STRING, NUMBER, CAT,
-               PLUS, MINUS, TIMES, DIVIDE,
-               EQ, LT, LE, GT, GE, NE, LATHER }
-
-
-    literals = { '(', ')', '{', '}', ';' }
-
-    # String containing ignored characters
+    tokens = { ID, NUMBER, STRING }
     ignore = ' \t'
+    literals = { '=', '+', '-', '*', '/', '(', ')', '~' }
 
-    # Regular expression rules for tokens
-    CAT     = r'~'
-    PLUS    = r'\+'
-    MINUS   = r'--'
-    TIMES   = r'\*'
-    DIVIDE  = r'/'
-    EQ      = r'=='
-    LE      = r'<='
-    LT      = r'<'
-    GE      = r'>='
-    GT      = r'>'
-    NE      = r'!='
+    # Tokens
+    ID = r'[a-zA-Z_][a-zA-Z0-9_]*'
 
-    STRING = r'\".*?\"'
-    #@_(r'\".*?\"')
-    #def STRING(self, t):
-    #    return (t.value)[1:-1]
-
-    @_(r'[+-]?([0-9]*[.])?[0-9]+')
-    def NUMBER(self, t):
-        t.value = float(t.value)
+    @_(r'\".*?\"')
+    def STRING(self, t):
         return t
 
-    # Identifiers and keywords
-    #ID = r'[a-zA-Z_][a-zA-Z0-9_]*'
-    #ID['lather'] = LATHER
-    LATHER = 'lather'
+    @_(r'\d+')
+    def NUMBER(self, t):
+        t.value = int(t.value)
+        return t
 
-    ignore_comment = r'\#.*'
-
-    # Line number tracking
     @_(r'\n+')
-    def ignore_newline(self, t):
+    def newline(self, t):
         self.lineno += t.value.count('\n')
 
     def error(self, t):
-        print('Line %d: Bad character %r' % (self.lineno, t.value[0]))
+        print("Illegal character '%s'" % t.value[0])
         self.index += 1
-################################################################################
-#    PARSER
-################################################################################
-from sly import Parser
-#from calclex import CalcLexer
 
 class CalcParser(Parser):
-    # Get the token list from the lexer (required)
     tokens = CalcLexer.tokens
 
-    #Split text and numbers between 'expr' and 'term'
+    precedence = (
+        ('left', '+', '-'),
+        ('left', '*', '/'),
+        ('right', 'UMINUS'),
+        )
 
-    # Grammar rules and actions
+    def __init__(self):
+        self.names = { }
 
-    @_('str CAT string')
+    @_('ID "=" expr')
+    def statement(self, p):
+        self.names[p.ID] = p.expr
+
+    @_('expr "~" expr')
     def expr(self, p):
-        return p.str + p.string
+        return str(p.expr0) + str(p.expr1)
 
-    @_('term PLUS factor')
-    def term(self, p):
-        return p.term + p.factor
-
-    #[Works with no errors]
-    @_('term MINUS factor')
-    def term(self, p):
-        return p.term - p.factor
-
-    @_('term TIMES factor')
-    def term(self, p):
-        return p.term * p.factor
-
-    @_('term DIVIDE factor')
-    def term(self, p):
-        return p.term / p.factor
-
-    ###############################
-    @_('term GE factor')
-    def term(self, p):
-        return p.term >= p.factor
-
-    @_('term LE factor')
-    def term(self, p):
-        return p.term <= p.factor
-
-    @_('term NE factor')
-    def term(self, p):
-        return p.term != p.factor
-
-    @_('term GT factor')
-    def term(self, p):
-        return p.term > p.factor
-
-    @_('term LT factor')
-    def term(self, p):
-        return p.term < p.factor
-
-    @_('term EQ factor')
-    def term(self, p):
-        return p.term == p.factor
-
-    ###############################
-
-    @_('term')
+    @_('expr "+" expr')
     def expr(self, p):
-        return p.term
+        try:
+            return p.expr0 + p.expr1
+        except TypeError:
+            print("Error: Type mismatch between",p.expr0,"and",p.expr1)
+            return 0
 
-    @_('factor')
-    def term(self, p):
-        return p.factor
+    @_('expr "-" expr')
+    def expr(self, p):
+        return p.expr0 - p.expr1
+
+    @_('expr "*" expr')
+    def expr(self, p):
+        return p.expr0 * p.expr1
+
+    @_('expr "/" expr')
+    def expr(self, p):
+        try:
+            return p.expr0 / p.expr1
+        except TypeError:
+            print("Error: Type mismatch between", p.expr0, "and", p.expr1)
+            return 0
+
+    @_('"-" expr %prec UMINUS')
+    def expr(self, p):
+        return -p.expr
+
+    @_('"(" expr ")"')
+    def expr(self, p):
+        return p.expr
 
     @_('NUMBER')
-    def factor(self, p):
+    def expr(self, p):
         return p.NUMBER
 
-    @_('str')
-    def expr(self,p):
-        return p.str
-
-    @_('string')
-    def str(self, p):
-        return p.string
-
-    @_('STRING')
-    def string(self, p):
-        #Cuts the quotation marks from the initial string
-        return (p.STRING)[1:-1]
-
-    @_('line')
+    @_('ID')
     def expr(self, p):
-        return p.line
+        try:
+            return self.names[p.ID]
+        except LookupError:
+            print("Undefined name '%s'" % p.ID)
+            return 0
 
-    @_('LATHER')
-    def line(self, p):
-        return ('          ___       ___  __  \n|     /\   |  |__| |__  |__) \n|___ /~~\  |  |  | |___ |  \ \n LAnguage THeory End Result \n\nDeveloped by Dylan Johnson, Richard Tran, and Tanner Tran')
+    ##############################################
+    @_('STRING')
+    def expr(self, p):
+        return p.STRING[1:-1]
 
-    @_('')
-    def line(self, p):
-        pass
 
-################################################################################
-#    MAIN
-################################################################################
 if __name__ == '__main__':
     lexer = CalcLexer()
     parser = CalcParser()
+    if (len(sys.argv) > 1):
+        with open(sys.argv[1]) as topo_file:
+            for line in topo_file:
+                parser.parse(lexer.tokenize(line))
+    else:
+        print("  __      __   ____  _   _  ____  ____ ")
+        print(" (  )    /__\ (_  _)( )_( )( ___)(  _ \ ")
+        print("  )(__  /(__)\  )(   ) _ (  )__)  )   /")
+        print(" (____)(__)(__)(__) (_) (_)(____)(_)\_)")
+        print("      'LAnguage THeory End Result'      ")
+        print("Dylan Johnson, Tanner Tran, Richard Tran")
+        while True:
+           try:
+               text = input('calc > ')
+           except EOFError:
+               break
+           if text:
+               parser.parse(lexer.tokenize(text))
 
-    print("Lather Language: Development Version")
-
-    while True:
-        try:
-            text = input('LatherLang > ')
-            result = parser.parse(lexer.tokenize(text))
-            print(result)
-        except EOFError:
-            break
