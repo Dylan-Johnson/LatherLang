@@ -49,7 +49,6 @@ class CalcParser(Parser):
 
     def __init__(self):
         self.names = { }
-        self.localnames = { }
         self.functions = { }
 
     @_('FUNCTION ID SUBROUTINE')
@@ -57,7 +56,7 @@ class CalcParser(Parser):
         if p.ID in self.names:
             print("Error:",p.ID,"is already defined as a variable")
             return
-        print ((p.SUBROUTINE[1:-1]).split(';'))
+        #print ((p.SUBROUTINE[1:-1]).split(';'))
         self.functions[p.ID] = (p.SUBROUTINE[1:-1]).split(';')
 
     @_('FUNCTION ID')
@@ -86,6 +85,13 @@ class CalcParser(Parser):
     @_('PRINT "(" expr ")"')
     def statement(self, p):
         print(p.expr)
+
+    @_('expr')
+    def statement(self, p):
+        if (len(sys.argv) > 1):
+            return p.expr
+        else:
+            print(p.expr)
 
     @_('expr "~" expr')
     def expr(self, p):
