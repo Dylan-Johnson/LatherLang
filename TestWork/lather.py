@@ -1,18 +1,29 @@
 # -----------------------------------------------------------------------------
 # calc.py
 # -----------------------------------------------------------------------------
+from inspect import currentframe, getframeinfo
 
 from sly import Lexer, Parser
 import sys
 
 class CalcLexer(Lexer):
-    tokens = { NAME, NUMBER, STRING }
+    tokens = { ID, NUMBER, STRING, PRINT, FUNCTION, CLEAR, SUBROUTINE }
     ignore = ' \t'
-    literals = { '=', '+', '-', '*', '/', '(', ')' }
+    literals = { '=', '+', '-', '*', '/', '(', ')', '~', ':' }
 
     # Tokens
-    NAME = r'[a-zA-Z_][a-zA-Z0-9_]*'
-    STRING = r'\".*?\"'
+    ID = r'[a-zA-Z_][a-zA-Z0-9_]*'
+    ID['print'] = PRINT
+    ID['function'] = FUNCTION
+    ID['clear'] = CLEAR
+
+    @_(r'\'.+?\'')
+    def SUBROUTINE(self, t):
+        return t
+
+    @_(r'\".*?\"')
+    def STRING(self, t):
+        return t
 
     @_(r'\d+')
     def NUMBER(self, t):
@@ -38,14 +49,53 @@ class CalcParser(Parser):
 
     def __init__(self):
         self.names = { }
+        self.functions = { }
 
-    @_('NAME "=" expr')
+    @_('FUNCTION ID SUBROUTINE')
     def statement(self, p):
-        self.names[p.NAME] = p.expr
+        if p.ID in self.names:
+            print("Error:",p.ID,"is already defined as a variable")
+            return
+        #print ((p.SUBROUTINE[1:-1]).split(';'))
+        self.functions[p.ID] = (p.SUBROUTINE[1:-1]).split(';')
+
+    @_('FUNCTION ID')
+    def statement(self, p):
+        try:
+            for x in self.functions[p.ID]:
+                parser.parse(lexer.tokenize(x))
+        except LookupError:
+            print("Undefined function '%s'" % p.ID)
+            return 0
+
+    @_('CLEAR ID')
+    def statement(self, p):
+        if p.ID in self.names:
+            del self.names[p.ID]
+        elif p.ID in self.functions:
+            del self.functions[p.ID]
+
+    @_('ID "=" expr')
+    def statement(self, p):
+        if p.ID in self.functions:
+            print("Error:",p.ID,"is already defined as a function")
+            return
+        self.names[p.ID] = p.expr
+
+    @_('PRINT "(" expr ")"')
+    def statement(self, p):
+        print(p.expr)
 
     @_('expr')
     def statement(self, p):
-        print(p.expr)
+        if (len(sys.argv) > 1):
+            return p.expr
+        else:
+            print(p.expr)
+
+    @_('expr "~" expr')
+    def expr(self, p):
+        return str(p.expr0) + str(p.expr1)
 
     @_('expr "+" expr')
     def expr(self, p):
@@ -83,19 +133,19 @@ class CalcParser(Parser):
     def expr(self, p):
         return p.NUMBER
 
-    @_('NAME')
+    @_('ID')
     def expr(self, p):
         try:
-            return self.names[p.NAME]
+
+            return self.names[p.ID]
         except LookupError:
-            print("Undefined name '%s'" % p.NAME)
+            print("Undefined name '%s'" % p.ID)
             return 0
 
     ##############################################
     @_('STRING')
     def expr(self, p):
         return p.STRING[1:-1]
-
 
 if __name__ == '__main__':
     lexer = CalcLexer()
@@ -119,20 +169,3 @@ if __name__ == '__main__':
            if text:
                parser.parse(lexer.tokenize(text))
 
-    #print(sys.argv[1])
-    #lexer = CalcLexer()
-    #parser = CalcParser()
-    #while True:
-    #    try:
-    #        text = input('calc > ')
-    #    except EOFError:
-    #        break
-    #    if text:
-    #        parser.parse(lexer.tokenize(text))
-
-    #lexer = CalcLexer()
-    #parser = CalcParser()
-    #with open('text') as topo_file:
-    #    for line in topo_file:
-    #        print(line),  # The comma to suppress the extra new line char
-    #        parser.parse(lexer.tokenize(line))
