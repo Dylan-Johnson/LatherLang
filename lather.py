@@ -17,12 +17,12 @@ class CalcLexer(Lexer):
     ID['function'] = FUNCTION
     ID['clear'] = CLEAR
 
-    @_(r'\".*?\"')
-    def STRING(self, t):
+    @_(r'\'.+?\'')
+    def SUBROUTINE(self, t):
         return t
 
-    @_(r'.*?')
-    def SUBROUTINE(self, t):
+    @_(r'\".*?\"')
+    def STRING(self, t):
         return t
 
     @_(r'\d+')
@@ -59,6 +59,15 @@ class CalcParser(Parser):
             return
         print ((p.SUBROUTINE[1:-1]).split(';'))
         self.functions[p.ID] = (p.SUBROUTINE[1:-1]).split(';')
+
+    @_('FUNCTION ID')
+    def statement(self, p):
+        try:
+            for x in self.functions[p.ID]:
+                parser.parse(lexer.tokenize(x))
+        except LookupError:
+            print("Undefined function '%s'" % p.ID)
+            return 0
 
     @_('CLEAR ID')
     def statement(self, p):
