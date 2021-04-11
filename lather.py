@@ -1,20 +1,28 @@
 # -----------------------------------------------------------------------------
 # calc.py
 # -----------------------------------------------------------------------------
+from inspect import currentframe, getframeinfo
 
 from sly import Lexer, Parser
 import sys
 
 class CalcLexer(Lexer):
-    tokens = { ID, NUMBER, STRING }
+    tokens = { ID, NUMBER, STRING, PRINT, FUNCTION, CLEAR, SUBROUTINE }
     ignore = ' \t'
-    literals = { '=', '+', '-', '*', '/', '(', ')', '~' }
+    literals = { '=', '+', '-', '*', '/', '(', ')', '~', ':' }
 
     # Tokens
     ID = r'[a-zA-Z_][a-zA-Z0-9_]*'
+    ID['print'] = PRINT
+    ID['function'] = FUNCTION
+    ID['clear'] = CLEAR
 
     @_(r'\".*?\"')
     def STRING(self, t):
+        return t
+
+    @_(r'.*?')
+    def SUBROUTINE(self, t):
         return t
 
     @_(r'\d+')
@@ -41,10 +49,34 @@ class CalcParser(Parser):
 
     def __init__(self):
         self.names = { }
+        self.localnames = { }
+        self.functions = { }
+
+    @_('FUNCTION ID SUBROUTINE')
+    def statement(self, p):
+        if p.ID in self.names:
+            print("Error:",p.ID,"is already defined as a variable")
+            return
+        print ((p.SUBROUTINE[1:-1]).split(';'))
+        self.functions[p.ID] = (p.SUBROUTINE[1:-1]).split(';')
+
+    @_('CLEAR ID')
+    def statement(self, p):
+        if p.ID in self.names:
+            del self.names[p.ID]
+        elif p.ID in self.functions:
+            del self.functions[p.ID]
 
     @_('ID "=" expr')
     def statement(self, p):
+        if p.ID in self.functions:
+            print("Error:",p.ID,"is already defined as a function")
+            return
         self.names[p.ID] = p.expr
+
+    @_('PRINT "(" expr ")"')
+    def statement(self, p):
+        print(p.expr)
 
     @_('expr "~" expr')
     def expr(self, p):
@@ -89,6 +121,7 @@ class CalcParser(Parser):
     @_('ID')
     def expr(self, p):
         try:
+
             return self.names[p.ID]
         except LookupError:
             print("Undefined name '%s'" % p.ID)
@@ -98,7 +131,6 @@ class CalcParser(Parser):
     @_('STRING')
     def expr(self, p):
         return p.STRING[1:-1]
-
 
 if __name__ == '__main__':
     lexer = CalcLexer()
